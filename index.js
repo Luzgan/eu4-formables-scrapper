@@ -4,6 +4,9 @@ const fs = require("fs");
 const axios = require("axios");
 const cheerio = require("cheerio");
 
+const pernamentBonusRegex =
+  /(.*? rest of the game)|(.*? end of the game)|(.*? rest of the campaign)/;
+
 class App {
   browser;
   page;
@@ -162,8 +165,7 @@ class App {
           const effectsCell = $(row).find("td").eq(2);
           const effects = $(effectsCell).text().trim();
 
-          const missionsRegex = /(.*? rest of the game)|(.*? end of the game)/;
-          const doesHavePernamentEffects = missionsRegex.test(effects);
+          const doesHavePernamentEffects = pernamentBonusRegex.test(effects);
 
           country.missions.push({
             missionDesc,

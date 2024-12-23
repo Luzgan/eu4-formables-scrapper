@@ -2,6 +2,8 @@
 
 Scrapper that lets you get some information about formable countries. Right now it is focusing on finding formables, with pernament bonuses, that are not end game tags - but you can play around with the way data is read, to make it fit to your needs.
 
+Obviously, because we are parsing here - there is possibility for mistakes, so if you notice something, please let me know.
+
 # Prerequisite
 
 1. Install node 18.17+

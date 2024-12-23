@@ -15,4 +15,5 @@ Now script will scrap (and cache) pages related to formables and on the end it w
 
 # Plan for a future
 
-1. Parse missions as well
+1. Parse events
+2. Parse decisions

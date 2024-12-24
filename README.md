@@ -13,7 +13,15 @@ Obviously, because we are parsing here - there is possibility for mistakes, so i
 
 Now script will scrap (and cache) pages related to formables and on the end it will create a result csv file, with all countries that are formable, are not end tag and have pernament bonuses from missions.
 
+# What is being parsed
+
+1. Formable countries
+2. Missions of countries that have unique tree
+3. Missions events
+
 # Plan for a future
 
-1. Parse events
-2. Parse decisions
+1. Parse country events
+2. Parse country decisions
+3. Parse what pernament bonuses are provided (though this one might be tricky :) )
+4. UI

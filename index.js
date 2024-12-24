@@ -34,7 +34,7 @@ class App {
     this.page = await this.browser.newPage();
   }
 
-  async scrapFormables() {
+  async scrapeFormables() {
     let html;
     if (this.isHtmlCached("formables")) {
       html = this.loadHtmlFromCache("formables");
@@ -55,8 +55,13 @@ class App {
       return caption === "Non-colonial formable nations";
     });
 
-    table.find("tr").each((index, row) => {
-      if (index === 0) return;
+    const trList = table.find("tr");
+    let handledHeader = false;
+    for (const row of trList) {
+      if (handledHeader === false) {
+        handledHeader = true;
+        continue;
+      }
 
       const countryCell = $(row).find("td").eq(0);
       const countryName = $(countryCell).text().trim();
@@ -96,10 +101,10 @@ class App {
         isEndGameTag,
         extraNotes,
       });
-    });
+    }
   }
 
-  async scrapMissions() {
+  async scrapeMissions() {
     for (const country of this.countryData) {
       if (country.doesHaveMissions) {
         let html;
@@ -126,14 +131,14 @@ class App {
         if (link) {
           country.missionLink = link;
           country.missionFullLink = `${this.host}${link}`;
-          await this.scrapSpecificMissionPage(country);
+          await this.scrapeSpecificMissionPage(country);
         }
       }
     }
   }
 
-  async scrapSpecificMissionPage(country) {
-    const cacheId = `${country.countryName}Missions`;
+  async scrapeSpecificMissionPage(country) {
+    const cacheId = `${country.missionLink}`;
     let html;
     if (this.isHtmlCached(cacheId)) {
       html = this.loadHtmlFromCache(cacheId);
@@ -150,39 +155,103 @@ class App {
     country.missions = [];
 
     const $ = cheerio.load(html);
-    $("table").each((index, row) => {
-      $(row)
-        .find("tr")
-        .each((index, row) => {
-          if (index === 0) return;
+    const missionTables = $("table");
+    for (const table of missionTables) {
+      const rows = $(table).find("tr");
+      let handledHeader = false;
+      for (const row of rows) {
+        if (handledHeader === false) {
+          handledHeader = true;
+          continue;
+        }
 
-          const missionDescCell = $(row).find("td").eq(0);
-          const missionDesc = $(missionDescCell).text().trim();
+        const missionDescCell = $(row).find("td").eq(0);
+        const missionDesc = $(missionDescCell).text().trim();
 
-          const requirementsCell = $(row).find("td").eq(1);
-          const requirements = $(requirementsCell).text().trim();
+        const requirementsCell = $(row).find("td").eq(1);
+        const requirements = $(requirementsCell).text().trim();
 
-          const effectsCell = $(row).find("td").eq(2);
-          const effects = $(effectsCell).text().trim();
+        const effectsCell = $(row).find("td").eq(2);
+        const effects = $(effectsCell).text().trim().replace(/\s\s+/g, " ");
 
-          const doesHavePernamentEffects = pernamentBonusRegex.test(effects);
+        const doesHavePernamentEffects = pernamentBonusRegex.test(effects);
 
-          country.missions.push({
-            missionDesc,
-            requirements,
-            effects,
-            doesHavePernamentEffects,
-          });
-        });
+        const missionInfo = {
+          missionDesc,
+          requirements,
+          effects,
+          doesHavePernamentEffects,
+        };
+
+        const eventRegex =
+          /(gets the event "(?<event_name1>.*?)")|(the event "(?<event_name2>.*?)" happens)|(Gets "(?<event_name3>.*?)" event)|(Gets the "(?<event_name4>.*?)" event)|(Trigger event "(?<event_name5>.*?)")/i;
+        missionInfo.doesHaveEvent = eventRegex.test(missionInfo.effects);
+        if (missionInfo.doesHaveEvent) {
+          const matched = missionInfo.effects.match(eventRegex);
+          const eventName =
+            matched["groups"]?.["event_name1"] ||
+            matched["groups"]?.["event_name2"] ||
+            matched["groups"]?.["event_name3"] ||
+            matched["groups"]?.["event_name4"] ||
+            matched["groups"]?.["event_name5"];
+
+          const linkNode = $(effectsCell)
+            .find("a")
+            .filter((index, el) => {
+              return $(el).text().trim() === eventName;
+            });
+
+          missionInfo.eventName = eventName;
+          missionInfo.eventsLink = linkNode.attr("href").replace(/#.*$/, "");
+          missionInfo.eventsLinkFull = `${this.host}${missionInfo.eventsLink}`;
+
+          await this.scrapeSpecificMissionEvent(missionInfo);
+        }
+
+        country.missions.push(missionInfo);
+      }
+    }
+  }
+
+  async scrapeSpecificMissionEvent(missionInfo) {
+    const cacheId = `${missionInfo.eventsLink}`;
+    let html;
+    if (this.isHtmlCached(cacheId)) {
+      html = this.loadHtmlFromCache(cacheId);
+    } else {
+      await this.page.goto(missionInfo.eventsLinkFull, {
+        waitUntil: "networkidle",
+        javaScriptEnabled: false,
+      });
+      await this.page.waitForSelector(".eu4box");
+      html = await this.page.content();
+      this.cacheHtml(cacheId, html);
+    }
+
+    const $ = cheerio.load(html);
+    const eventBox = $(".eu4box").filter((index, el) => {
+      const title = $(el).find("h3").eq(0);
+      return title === missionInfo.eventName;
     });
+
+    const informationTable = $(eventBox).find("table").eq(1);
+    const eventEffects = $(informationTable)
+      .find("tr")
+      .eq(2)
+      .text()
+      .trim()
+      .replace(/\s\s+/g, " ");
+    missionInfo.eventEffects = eventEffects;
+    missionInfo.doesEventHavePernamentEffects =
+      pernamentBonusRegex.test(eventEffects);
   }
 }
 
 async function startApp() {
   const app = new App();
   await app.init();
-  await app.scrapFormables();
-  await app.scrapMissions();
+  await app.scrapeFormables();
+  await app.scrapeMissions();
   await app.browser.close();
 
   // Handle data here as you want
@@ -197,7 +266,11 @@ async function startApp() {
   });
   for (const country of app.countryData) {
     if (
-      country?.missions?.find((mission) => mission.doesHavePernamentEffects) &&
+      country?.missions?.find(
+        (mission) =>
+          mission.doesHavePernamentEffects ||
+          (mission.doesHaveEvent && mission.doesEventHavePernamentEffects)
+      ) &&
       country.isEndGameTag === false
     ) {
       await csvWriter.writeRecords([country]);
